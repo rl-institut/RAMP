@@ -22,6 +22,7 @@ The model is developed in Python 3.6, and requires the following libraries:
 * matplotlib
 * math
 * random
+* pandas
 
 ## Quick start
 To get started, download the repository and simply run the "ramp_run.py" script. The console will ask how many profiles (i.e. independent days) need to be simulated, and will provide the results based on the default inputs defined in `input_file_x`.py. To change the inputs, just modify the latter files. Some guidance about the meaning of each input parameter is available in the `core.py` file, where the *User* and *Appliance* Python classes are defined and fully commented. 
