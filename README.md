@@ -27,6 +27,36 @@ The model is developed in Python 3.6, and requires the following libraries:
 ## Quick start
 To get started, download the repository and simply run the "ramp_run.py" script. The console will ask how many profiles (i.e. independent days) need to be simulated, and will provide the results based on the default inputs defined in `input_file_x`.py. To change the inputs, just modify the latter files. Some guidance about the meaning of each input parameter is available in the `core.py` file, where the *User* and *Appliance* Python classes are defined and fully commented. 
 
+### Input variables
+| S.No. | Variables       | Variables description                                                         |
+|-------|-----------------|-------------------------------------------------------------------------------|
+|       | User class      |                                                                               |
+| 1     | name            | user type                                                                     |
+| 2     | n_users         | number of users                                                               |
+| 3     | us_pref         | user preferance (no. of options for meals the users can choose every day)     |
+|       | Appliance class |                                                                               |
+| 4     | user            | user type                                                                     |
+| 5     | n               | number of devices                                                             |
+| 6     | P               | Power of a device                                                             |
+| 7     | w               | number of windows                                                             |
+| 8     | t               | functioning time                                                              |
+| 9     | r_t             | random variability in time                                                    |
+| 10    | c               | functioning cycle (min time on after switch on)                               |
+| 11    | fixed           | yes = all n appliances switched on together                                   |
+| 12    | fixed_cycle     | number of duty cycles associated                                              |
+| 13    | occasional_use  | usage probability during the day                                              |
+| 14    | flat            | yes = appliances with no random variablility                                  |
+| 15    | thermal_P_var   | random variation in app power                                                 |
+| 16    | pref_index      | preference index for user preference (differnt index for different meal type) |
+| 17    | wd_we_type      | days associated with the app (0/1/2 - wd/we/all_week)                         |
+| 18    | P_series        | Is power inut given as a series or not (True / False)                         |
+| 19    | wi              | functioning window (wi = np.array([t1,t2]))                                   |
+| 20    | r_w             | random variability in start and ending times of the windows                   |
+| 21    | Pij             | Power consumed during jth part of ith duty cycle                              |
+| 22    | tij             | duration of jth part of ith duty cycle                                        |
+| 23    | r_ci            | random variability of the duty cycle segments duration                        |
+| 24    | cwij            | jth window associated with ith cycle (cwij = np.array([t1,t2]))               |
+
 ### Example input files
 Three different input files are provided as example representing three different categories of appliancces that can be modelled with RAMP.
 
