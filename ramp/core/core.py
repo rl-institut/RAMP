@@ -4,6 +4,7 @@
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
+import random
 #%% Definition of Python classes that constitute the model architecture
 '''
 The code is based on two concatenated python classes, namely 'User' and
@@ -23,7 +24,7 @@ class User():
         self.App_list = [] #each instance of User (i.e. each user class) has its own list of Appliances
 
     def add_appliance(self, *args, **kwargs):
-        return Appliance(self, *args, **kwargs)
+        return Appliance(*args, **kwargs)
 
     @property
     def windows_curve(self):
@@ -83,6 +84,22 @@ class Appliance():
         if self.activate == 1:
             self.cw11 = self.window_1
             self.cw12 = self.window_2
+
+    def calc_rand_window(self, window_num=1, max_window_range=[0, 1440]):
+        _window = self.__getattribute__(f'window_{window_num}')
+        _random_var = self.__getattribute__(f'random_var_{window_num}')
+        rand_window = np.array(
+            [
+                int(random.uniform(_window[0] - _random_var, _window[0] + _random_var)),
+                int(random.uniform(_window[1] - _random_var, _window[1] + _random_var))
+            ]
+        )
+        if rand_window[0] < max_window_range[0]:
+            rand_window[0] = max_window_range[0]
+        if rand_window[1] > max_window_range[1]:
+            rand_window[1] = max_window_range[1]
+
+        return rand_window
 
     @property
     def single_wcurve(self):
