@@ -35,8 +35,6 @@ class User():
             windows_curve = np.vstack([windows_curve, single_wcurve])  # this stacks the specific App curve in an overall curve comprising all the Apps within a User class
         return np.transpose(np.sum(windows_curve, axis=0)) * self.num_users
 
-
-
 """
 The Appliance is added the the App_list whenever its window method is called
 Applicance does not need to be part of User class ..., this simplifies a bit the 
@@ -61,7 +59,7 @@ class Appliance():
         self.Thermal_P_var = thermal_P_var #allows to randomly variate the App power within a range
         self.Pref_index = pref_index #defines preference index for association with random User daily preference behaviour
         self.wd_we = wd_we_type #defines if the App is associated with weekdays or weekends | 0 is wd 1 is we 2 is all week
-        if P_series == False and isinstance(power, pd.DataFrame) == False: #check if the user defined P as timeseries
+        if P_series == False and not isinstance(power, pd.DataFrame): #check if the user defined P as timeseries
             self.POWER = power*np.ones(365) #treat the power as single value for the entire year
         else:
             self.POWER = power.values[:,0] #if a timeseries is given the power is treated as so

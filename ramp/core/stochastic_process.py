@@ -8,24 +8,27 @@ import math
 from ramp.core.initialise import Initialise_model, Initialise_inputs
 
 #%% Core model stochastic script
+def calc_peak_time_range(user_list, peak_enlarg):
+    """
+    Calculation of the peak time range, which is used to discriminate between off-peak and on-peak coincident switch-on probability
+    Calculates first the overall Peak Window (taking into account all User classes).
+    The peak window is just a time window in which coincident switch-on of multiple appliances assumes a higher probability than off-peak
+    Within the peak window, a random peak time is calculated and then enlarged into a peak_time_range following again a random procedure
+    """
+    Tot_curve = np.zeros(1440)  # creates an empty daily profile
+    for Us in user_list:
+        Tot_curve = Tot_curve + Us.windows_curve  # adds the User's theoretical max profile to the total theoretical max comprising all classes
+    peak_window = np.transpose(np.argwhere(Tot_curve == np.amax(Tot_curve)))  # Find the peak window within the theoretical max profile
+    peak_time = round(random.normalvariate(round(np.average(peak_window)), 1 / 3 * (peak_window[0, -1] - peak_window[0, 0])))  # Within the peak_window, randomly calculate the peak_time using a gaussian distribution
+    rand_peak_enlarge = round(math.fabs(peak_time - random.gauss(peak_time, peak_enlarg * peak_time)))
+    peak_time_range = np.arange(peak_time - rand_peak_enlarge , peak_time + rand_peak_enlarge)  # the peak_time is randomly enlarged based on the calibration parameter peak_enlarg
+    return peak_time_range
 
 def Stochastic_Process(j):
     Profile, num_profiles = Initialise_model()
     peak_enlarg, mu_peak, s_peak, op_factor, Year_behaviour, User_list = Initialise_inputs(j)
-    '''
-    Calculation of the peak time range, which is used to discriminate between off-peak and on-peak coincident switch-on probability
-    Calculates first the overall Peak Window (taking into account all User classes). 
-    The peak window is just a time window in which coincident switch-on of multiple appliances assumes a higher probability than off-peak
-    Within the peak window, a random peak time is calculated and then enlarged into a peak_time_range following again a random procedure
-    '''
-    windows_curve = np.zeros(1440) #creates an empty daily profile
-    Tot_curve = np.zeros(1440) #creates another empty daily profile
-    for Us in User_list:
-        Tot_curve = Tot_curve + Us.windows_curve #adds the User's theoretical max profile to the total theoretical max comprising all classes
-    peak_window = np.transpose(np.argwhere(Tot_curve == np.amax(Tot_curve))) #Find the peak window within the theoretical max profile
-    peak_time = round(random.normalvariate(round(np.average(peak_window)),1/3*(peak_window[0,-1]-peak_window[0,0]))) #Within the peak_window, randomly calculate the peak_time using a gaussian distribution
-    peak_time_range = np.arange((peak_time-round(math.fabs(peak_time-(random.gauss(peak_time,(peak_enlarg*peak_time)))))),(peak_time+round(math.fabs(peak_time-random.gauss(peak_time,(peak_enlarg*peak_time)))))) #the peak_time is randomly enlarged based on the calibration parameter peak_enlarg
-    
+    peak_time_range = calc_peak_time_range(user_list = User_list, peak_enlarg = peak_enlarg)
+
     '''
     The core stochastic process starts here. For each profile requested by the software user, 
     each Appliance instance within each User instance is separately and stochastically generated
@@ -35,30 +38,14 @@ def Stochastic_Process(j):
         for Us in User_list: #iterates for each User instance (i.e. for each user class)
             Us.load = np.zeros(1440) #initialise empty load for User instance
             for i in range(Us.num_users): #iterates for every single user within a User class. Each single user has its own separate randomisation
-                if Us.user_preference == 0:
-                    rand_daily_pref = 0
-                    pass
-                else:
-                    rand_daily_pref = random.randint(1,Us.user_preference)
+                rand_daily_pref = 0 if Us.user_preference == 0 else random.randint(1, Us.user_preference)
                 for App in Us.App_list: #iterates for all the App types in the given User class
                     #initialises variables for the cycle
                     tot_time = 0
                     App.daily_use = np.zeros(1440)
-                    if random.uniform(0,1) > App.occasional_use: #evaluates if occasional use happens or not
-                        continue
-                    else:
-                        pass
-                    
-                    if App.Pref_index == 0:
-                        pass
-                    else:
-                        if rand_daily_pref == App.Pref_index: #evaluates if daily preference coincides with the randomised daily preference number
-                            pass
-                        else:
-                            continue
-                    if App.wd_we == Year_behaviour[prof_i] or App.wd_we == 2 : #checks if the app is allowed in the given yearly behaviour pattern
-                        pass
-                    else:
+                    if ((random.uniform(0, 1) > App.occasional_use)  # evaluates if occasional use happens or not
+                            or (App.Pref_index != 0 and rand_daily_pref != App.Pref_index)  # evaluates if daily preference coincides with the randomised daily preference number
+                            or (App.wd_we != Year_behaviour[prof_i] and App.wd_we != 2)):  # checks if the app is allowed in the given yearly behaviour pattern
                         continue
 
                     #recalculate windows start and ending times randomly, based on the inputs
@@ -67,18 +54,18 @@ def Stochastic_Process(j):
                     rand_window_3 = App.calc_rand_window(window_num=3)
 
                     #redefines functioning windows based on the previous randomisation of the boundaries
+                    random_windows = [rand_window_1, rand_window_2, rand_window_3]
                     if App.flat == 'yes': #if the app is "flat" the code stops right after filling the newly created windows without applying any further stochasticity
-                        App.daily_use[rand_window_1[0]:rand_window_1[1]] = np.full(np.diff(rand_window_1),App.POWER[prof_i]*App.number)
-                        App.daily_use[rand_window_2[0]:rand_window_2[1]] = np.full(np.diff(rand_window_2),App.POWER[prof_i]*App.number)
-                        App.daily_use[rand_window_3[0]:rand_window_3[1]] = np.full(np.diff(rand_window_3),App.POWER[prof_i]*App.number)
+                        total_power_value = App.POWER[prof_i]*App.number
+                        for rand_window in random_windows:
+                            App.daily_use[rand_window[0]:rand_window[1]] = np.full(np.diff(rand_window),total_power_value)
                         Us.load = Us.load + App.daily_use
                         continue
                     else: #otherwise, for "non-flat" apps it puts a mask on the newly defined windows and continues    
-                        App.daily_use[rand_window_1[0]:rand_window_1[1]] = np.full(np.diff(rand_window_1),0.001)
-                        App.daily_use[rand_window_2[0]:rand_window_2[1]] = np.full(np.diff(rand_window_2),0.001)
-                        App.daily_use[rand_window_3[0]:rand_window_3[1]] = np.full(np.diff(rand_window_3),0.001)
+                        for rand_window in random_windows:
+                            App.daily_use[rand_window[0]:rand_window[1]] = np.full(np.diff(rand_window),0.001)
+
                     App.daily_use_masked = np.zeros_like(ma.masked_not_equal(App.daily_use,0.001))
-                  
                     App.power = App.POWER[prof_i]
                     
                     #random variability is applied to the total functioning time and to the duration of the duty cycles, if they have been specified
