@@ -5,6 +5,8 @@ import numpy as np
 import numpy.ma as ma
 import pandas as pd
 import random
+import math
+
 #%% Definition of Python classes that constitute the model architecture
 '''
 The code is based on two concatenated python classes, namely 'User' and
@@ -123,6 +125,38 @@ class Appliance():
         return np.arange(switch_on, switch_on + (int(random.uniform(self.func_cycle, upper_limit)))) if upper_limit >= self.func_cycle \
             else np.arange(switch_on, switch_on + upper_limit)
 
+    def calc_coincident_switch_on(self, s_peak, mu_peak, op_factor, peak_time_range, index):
+        if np.in1d(peak_time_range,index).any() and self.fixed == 'no':  # check if indexes are in peak window and if the coincident behaviour is locked by the "fixed" attribute
+            return min(self.number, max(1, math.ceil(random.gauss((self.number * mu_peak + 0.5), (s_peak * self.number * mu_peak)))))# calculates coincident behaviour within the peak time range
+        elif np.in1d(peak_time_range,index).any() == False and self.fixed == 'no':  # check if indexes are off-peak and if coincident behaviour is locked or not
+            Prob = random.uniform(0, (self.number - op_factor) / self.number)  # calculates probability of coincident switch_ons off-peak
+            array = np.arange(0, self.number) / self.number
+            try:
+                on_number = np.max(np.where(Prob >= array)) + 1
+            except ValueError:
+                on_number = 1
+            return on_number #randomly selects how many apps are on at the same time for each app type based on the above probabilistic algorithm
+        else:
+            return self.number #this is the case when App.fixed is activated. All 'n' apps of an App instance are switched_on altogether
+
+    def calc_app_daily_use_masked(self, random_cycle1, random_cycle2, random_cycle3, coincidence, power, index):
+        if self.activate > 0:  # evaluates if the app has some duty cycles to be considered
+            evaluate = np.round(np.mean(index)) if index.size > 0 else 0
+
+            if evaluate in range(self.cw11[0], self.cw11[1]) or evaluate in range(self.cw12[0], self.cw12[1]):
+                np.put(self.daily_use, index, (random_cycle1 * coincidence))
+                np.put(self.daily_use_masked, index, (random_cycle1 * coincidence), mode='clip')
+            elif evaluate in range(self.cw21[0], self.cw21[1]) or evaluate in range(self.cw22[0], self.cw22[1]):
+                np.put(self.daily_use, index, (random_cycle2 * coincidence))
+                np.put(self.daily_use_masked, index, (random_cycle2 * coincidence), mode='clip')
+            else:
+                np.put(self.daily_use, index, (random_cycle3 * coincidence))
+                np.put(self.daily_use_masked, index, (random_cycle3 * coincidence), mode='clip')
+        else:  # if no duty cycles are specified, a regular switch_on event is modelled
+            np.put(self.daily_use, index, (power * (random.uniform((1 - self.Thermal_P_var), (1 + self.Thermal_P_var))) * coincidence))  # randomises also the App Power if Thermal_P_var is on
+            np.put(self.daily_use_masked, index,(power * (random.uniform((1 - self.Thermal_P_var), (1 + self.Thermal_P_var))) * coincidence),
+                   mode='clip')
+        return np.zeros_like(ma.masked_greater_equal(self.daily_use_masked,0.001))  # updates the mask excluding the current switch_on event to identify the free_spots for the next iteration
 
     @property
     def single_wcurve(self):
