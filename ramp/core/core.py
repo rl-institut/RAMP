@@ -65,25 +65,20 @@ class Appliance():
             self.POWER = power.values[:,0] #if a timeseries is given the power is treated as so
 
     def windows(self, w1 = np.array([0,0]), w2 = np.array([0,0]),r_w = 0, w3 = np.array([0,0])):
-        self.window_1 = w1 #array of start and ending time for window of use #1
-        self.window_2 = w2 #array of start and ending time for window of use #2
-        self.window_3 = w3 #array of start and ending time for window of use #3
-        self.random_var_w = r_w #percentage of variability in the start and ending times of the windows
-        self.daily_use = np.zeros(1440) #create an empty daily use profile
-        self.daily_use[w1[0]:(w1[1])] = np.full(np.diff(w1),0.001) #fills the daily use profile with infinitesimal values that are just used to identify the functioning windows
-        self.daily_use[w2[0]:(w2[1])] = np.full(np.diff(w2),0.001) #same as above for window2
-        self.daily_use[w3[0]:(w3[1])] = np.full(np.diff(w3),0.001) #same as above for window3
+        self.random_var_w = r_w  # percentage of variability in the start and ending times of the windows
+        self.daily_use = np.zeros(1440)  # create an empty daily use profile
+        for count, window_x in enumerate((w1,w2,w3),start=1):
+            self.__setattr__(f'window_{count}',window_x) #array of start and ending time for window of use #1,2 & 3
+            self.daily_use[window_x[0]:window_x[1]] = np.full(np.diff(window_x), 0.001) #fills the daily use profile with infinitesimal values that are just used to identify the functioning windows
+            self.__setattr__(f'random_var_{count}', int(r_w*np.diff(window_x))) #calculate the random variability of the windows, i.e. the maximum range of time they can be enlarged or shortened
         self.daily_use_masked = np.zeros_like(ma.masked_not_equal(self.daily_use,0.001)) #apply a python mask to the daily_use array to make only functioning windows 'visibile'
-        self.random_var_1 = int(r_w*np.diff(w1)) #calculate the random variability of window1, i.e. the maximum range of time they can be enlarged or shortened
-        self.random_var_2 = int(r_w*np.diff(w2)) #same as above
-        self.random_var_3 = int(r_w*np.diff(w3)) #same as above
         self.user.App_list.append(self) #automatically appends the appliance to the user's appliance list
 
         if self.activate == 1:
             self.cw11 = self.window_1
             self.cw12 = self.window_2
 
-    def calc_rand_window(self, window_num=1, max_window_range=[0, 1440]):
+    def calc_rand_window(self, window_num=1, max_window_range=np.array([0, 1440])):
         _window = self.__getattribute__(f'window_{window_num}')
         _random_var = self.__getattribute__(f'random_var_{window_num}')
         rand_window = np.array(
@@ -98,6 +93,36 @@ class Appliance():
             rand_window[1] = max_window_range[1]
 
         return rand_window
+
+    def switch_on(self):
+        rand_window_1 = self.calc_rand_window(window_num=1)
+        rand_window_2 = self.calc_rand_window(window_num=2)
+        rand_window_3 = self.calc_rand_window(window_num=3)
+
+        # check how many windows to consider
+        if self.num_windows == 1:
+            return int(random.choice([random.uniform(rand_window_1[0], (rand_window_1[1]))]))
+
+        elif self.num_windows == 2:
+            return int(random.choice(np.concatenate((np.arange(rand_window_1[0], rand_window_1[1]), np.arange(rand_window_2[0], rand_window_2[1])), axis=0)))
+
+        else:
+            return int(random.choice(np.concatenate((np.arange(rand_window_1[0], rand_window_1[1]), np.arange(rand_window_2[0], rand_window_2[1]), np.arange(rand_window_3[0], rand_window_3[1]),), axis=0)))
+
+    def calc_indexes_for_rand_switch_on(self, switch_on, rand_time, max_free_spot, rand_window):
+        if np.any(self.daily_use[switch_on:rand_window[1]] != 0.001):  # control to check if there are any other switch on times after the current one
+            next_switch = [switch_on + k[0] for k in np.where(self.daily_use[switch_on:] != 0.001)]  # identifies the position of next switch on time and sets it as a limit for the duration of the current switch on
+            if (next_switch[0] - switch_on) >= self.func_cycle and max_free_spot >= self.func_cycle:
+                upper_limit = min((next_switch[0] - switch_on), min(rand_time, rand_window[1] - switch_on))
+            elif (next_switch[0] - switch_on) < self.func_cycle and max_free_spot >= self.func_cycle:  # if next switch_on event does not allow for a minimum functioning cycle without overlapping, but there are other larger free spots, the cycle tries again from the beginning
+                return None
+            else:
+                upper_limit = next_switch[0] - switch_on  # if there are no other options to reach the total time of use, empty spaces are filled without minimum cycle restrictions until reaching the limit
+        else:
+            upper_limit = min(rand_time, rand_window[1] - switch_on)  # if there are no other switch-on events after the current one, the upper duration limit is set this way
+        return np.arange(switch_on, switch_on + (int(random.uniform(self.func_cycle, upper_limit)))) if upper_limit >= self.func_cycle \
+            else np.arange(switch_on, switch_on + upper_limit)
+
 
     @property
     def single_wcurve(self):
