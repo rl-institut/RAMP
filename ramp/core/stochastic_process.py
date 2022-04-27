@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-
 #%% Import required libraries
 import numpy as np
 import numpy.ma as ma
 import random 
 import math
-from ramp.core.initialise import Initialise_model, Initialise_inputs
+from ramp.core.initialise import Initialise_model, Initialise_inputs, calibration_parameters
+#from core import Appliance as App, User as Us
 
 def calc_peak_time_range(user_list, peak_enlarg):
     """
@@ -76,8 +76,8 @@ def Stochastic_Process(j):
                     #random variability is applied to the total functioning time and to the duration of the duty cycles, if they have been specified
                     random_var_t = randomise_variables(App.r_t)
                     if App.activate == 1:
-                        App.p_11 = App.P_11*randomise_variables(App.Thermal_P_var) #randomly variates the power of thermal apps, otherwise variability is 0
-                        App.p_12 = App.P_12*randomise_variables(App.Thermal_P_var) #randomly variates the power of thermal apps, otherwise variability is 0
+                        App.p_11 = App.P_11 * randomise_variables(App.Thermal_P_var) #randomly variates the power of thermal apps, otherwise variability is 0
+                        App.p_12 = App.P_12 * randomise_variables(App.Thermal_P_var) #randomly variates the power of thermal apps, otherwise variability is 0
                         rand_r_c1 = randomise_variables(App.r_c1)
                         random_cycle1 = calc_random_cycle(App.t_11,App.p_11,App.t_12,App.p_12,rand_r_c1)
                         random_cycle3 = random_cycle2 = random_cycle1
@@ -112,47 +112,40 @@ def Stochastic_Process(j):
                     if rand_time > 0.99*(np.diff(rand_window_1)+np.diff(rand_window_2)+np.diff(rand_window_3)):
                         rand_time = int(0.99*(np.diff(rand_window_1)+np.diff(rand_window_2)+np.diff(rand_window_3)))
                     max_free_spot = rand_time #free spots are used to detect if there's still space for switch_ons. Before calculating actual free spots, the max free spot is set equal to the entire randomised func_time
-                           
-                    while tot_time <= rand_time: #this is the key cycle, which runs for each App until the switch_ons and their duration equals the randomised total time of use of the App
-                            switch_on = App.switch_on()
-                            if App.daily_use[switch_on] == 0.001: #control to check if the app is not already on at the randomly selected switch-on time
-                                if switch_on in range(rand_window_1[0],rand_window_1[1]):
-                                    indexes = App.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot, rand_window_1)
-                                    if indexes is None:
-                                        continue
-                                elif switch_on in range(rand_window_2[0], rand_window_2[1]):
-                                    indexes = App.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot, rand_window_2)
-                                    if indexes is None:
-                                        continue
-                                else:
-                                    indexes = App.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot, rand_window_3)
-                                    if indexes is None:
-                                        continue
 
-                                tot_time = tot_time + indexes.size #the count of total time is updated with the size of the indexes array
-                                
-                                if tot_time > rand_time: #control to check when the total functioning time is reached. It will be typically overcome, so a correction is applied to avoid this
-                                    indexes_adj = indexes[:-(tot_time-rand_time)] #corrects indexes size to avoid overcoming total time
-                                    coincidence = App.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range, index=indexes_adj)
-                                    App.daily_use_masked = App.calc_app_daily_use_masked(random_cycle1, random_cycle2, random_cycle3, coincidence, power=App.power, index=indexes_adj)
-                                    tot_time = (tot_time - indexes.size) + indexes_adj.size #updates the total time correcting the previous value
-                                    break #exit cycle and go to next App
-                                else: #if the tot_time has not yet exceeded the App total functioning time, the cycle does the same without applying corrections to indexes size
-                                    coincidence = App.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range, index=indexes)
-                                    App.daily_use_masked = App.calc_app_daily_use_masked(random_cycle1, random_cycle2, random_cycle3, coincidence, power=App.power, index=indexes)
-                                    tot_time = tot_time #no correction applied to previously calculated value
-                                                    
-                                free_spots = [] #calculate how many free spots remain for further switch_ons
-                                try:
-                                    for j in ma.notmasked_contiguous(App.daily_use_masked):
-                                        free_spots.append(j.stop-j.start)
-                                except TypeError:
-                                    free_spots = [0]
-                                max_free_spot = max(free_spots) 
-    
-                            else:
-                                continue #if the random switch_on falls somewhere where the App has been already turned on, tries again from beginning of the while cycle
-                    Us.load = Us.load + App.daily_use #adds the App profile to the User load
+                    while tot_time <= rand_time:  # this is the key cycle, which runs for each App until the switch_ons and their duration equals the randomised total time of use of the App
+                        switch_on = App.switch_on
+                        if App.daily_use[switch_on] != 0.001: #control to check if the app is not already on at the randomly selected switch-on time
+                            continue  # if the random switch_on falls somewhere where the App has been already turned on, tries the following conditions
+                        if switch_on in range(rand_window_1[0], rand_window_1[1]):
+                            indexes = App.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot, rand_window_1)
+                        elif switch_on in range(rand_window_2[0], rand_window_2[1]):
+                            indexes = App.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot,rand_window_2)
+                        else:
+                            indexes = App.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot,rand_window_3)
+                        if indexes is None:
+                            continue
+                        tot_time = tot_time + indexes.size  # the count of total time is updated with the size of the indexes array
+
+                        if tot_time > rand_time:  # control to check when the total functioning time is reached. It will be typically overcome, so a correction is applied to avoid this
+                            indexes_adj = indexes[:-(tot_time - rand_time)]  # corrects indexes size to avoid overcoming total time
+                            coincidence = App.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range,index=indexes_adj)
+                            App.daily_use_masked = App.calc_app_daily_use_masked(random_cycle1, random_cycle2,random_cycle3, coincidence, App.power,index=indexes_adj)
+                            #tot_time = (tot_time - indexes.size) + indexes_adj.size  # updates the total time correcting the previous value
+                            break  # exit cycle and go to next App
+                        else:  # if the tot_time has not yet exceeded the App total functioning time, the cycle does the same without applying corrections to indexes size
+                            coincidence = App.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range,index=indexes)
+                            App.daily_use_masked = App.calc_app_daily_use_masked(random_cycle1, random_cycle2,random_cycle3, coincidence, App.power,index=indexes)
+                            tot_time = tot_time  # no correction applied to previously calculated value
+
+                        free_spots = []  # calculate how many free spots remain for further switch_ons
+                        try:
+                            free_spots.extend(j.stop - j.start for j in ma.notmasked_contiguous(App.daily_use_masked))
+
+                        except TypeError:
+                            free_spots = [0]
+                        max_free_spot = max(free_spots)
+                    Us.load = Us.load + App.daily_use  # adds the App profile to the User load
             Tot_Classes = Tot_Classes + Us.load #adds the User load to the total load of all User classes
         Profile.append(Tot_Classes) #appends the total load to the list that will contain all the generated profiles
         print('Profile',prof_i+1,'/',num_profiles,'completed') #screen update about progress of computation
