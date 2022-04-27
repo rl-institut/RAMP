@@ -6,7 +6,7 @@ import numpy.ma as ma
 import pandas as pd
 import random
 import math
-
+from ramp.core.initialise import calibration_parameters
 #%% Definition of Python classes that constitute the model architecture
 '''
 The code is based on two concatenated python classes, namely 'User' and
@@ -96,6 +96,7 @@ class Appliance():
 
         return rand_window
 
+    @property
     def switch_on(self):
         rand_window_1 = self.calc_rand_window(window_num=1)
         rand_window_2 = self.calc_rand_window(window_num=2)
@@ -157,6 +158,48 @@ class Appliance():
             np.put(self.daily_use_masked, index,(power * (random.uniform((1 - self.Thermal_P_var), (1 + self.Thermal_P_var))) * coincidence),
                    mode='clip')
         return np.zeros_like(ma.masked_greater_equal(self.daily_use_masked,0.001))  # updates the mask excluding the current switch_on event to identify the free_spots for the next iteration
+
+    def get_single_user_load_profile(self, rand_time, tot_time, rand_window_1, rand_window_2, rand_window_3,
+                                     max_free_spot,peak_time_range, random_cycle1, random_cycle2, random_cycle3, power,
+                                     user_load):
+
+        _, mu_peak, s_peak, op_factor = calibration_parameters()
+
+        while tot_time <= rand_time:  # this is the key cycle, which runs for each App until the switch_ons and their duration equals the randomised total time of use of the App
+            switch_on = self.switch_on
+            if self.daily_use[switch_on] != 0.001:
+                continue  # if the random switch_on falls somewhere where the App has been already turned on, tries again from beginning of the while cycle
+            if switch_on in range(rand_window_1[0], rand_window_1[1]):
+                indexes = self.calc_indexes_for_rand_switch_on(switch_on=switch_on, rand_time=rand_time,
+                                                              max_free_spot=max_free_spot, rand_window=rand_window_1)
+            elif switch_on in range(rand_window_2[0], rand_window_2[1]):
+                indexes = self.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot, rand_window_2)
+            else:
+                indexes = self.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot, rand_window_3)
+            if indexes is None:
+                continue
+            tot_time = tot_time + indexes.size  # the count of total time is updated with the size of the indexes array
+            if tot_time > rand_time:  # control to check when the total functioning time is reached. It will be typically overcome, so a correction is applied to avoid this
+                indexes_adj = indexes[:-(tot_time - rand_time)]  # corrects indexes size to avoid overcoming total time
+                coincidence = self.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range,index=indexes_adj)
+                self.daily_use_masked = self.calc_app_daily_use_masked(random_cycle1, random_cycle2, random_cycle3,
+                                                                     coincidence, power, index=indexes_adj)
+                break  # exit cycle and go to next App
+            else:  # if the tot_time has not yet exceeded the App total functioning time, the cycle does the same without applying corrections to indexes size
+                coincidence = self.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range, index=indexes)
+                self.daily_use_masked = self.calc_app_daily_use_masked(random_cycle1, random_cycle2, random_cycle3,
+                                                                     coincidence, power, index=indexes)
+                tot_time = tot_time  # no correction applied to previously calculated value
+
+            free_spots = []  # calculate how many free spots remain for further switch_ons
+            try:
+                free_spots.extend(j.stop - j.start for j in ma.notmasked_contiguous(self.daily_use_masked))
+
+            except TypeError:
+                free_spots = [0]
+            max_free_spot = max(free_spots)
+        user_load = user_load + self.daily_use  # adds the App profile to the User load
+        return user_load
 
     @property
     def single_wcurve(self):

@@ -4,10 +4,10 @@ import numpy as np
 import numpy.ma as ma
 import random 
 import math
-from ramp.core.initialise import Initialise_model, Initialise_inputs, calibration_parameters
-#from core import Appliance as App, User as Us
+from ramp.core.initialise import Initialise_model, Initialise_inputs
 
-def calc_peak_time_range(user_list, peak_enlarg):
+
+def calc_peak_time_range(user_list, peak_enlarge):
     """
     Calculation of the peak time range, which is used to discriminate between off-peak and on-peak coincident switch-on probability
     Calculates first the overall Peak Window (taking into account all User classes).
@@ -19,8 +19,8 @@ def calc_peak_time_range(user_list, peak_enlarg):
         Tot_curve = Tot_curve + Us.windows_curve  # adds the User's theoretical max profile to the total theoretical max comprising all classes
     peak_window = np.transpose(np.argwhere(Tot_curve == np.amax(Tot_curve)))  # Find the peak window within the theoretical max profile
     peak_time = round(random.normalvariate(round(np.average(peak_window)), 1 / 3 * (peak_window[0, -1] - peak_window[0, 0])))  # Within the peak_window, randomly calculate the peak_time using a gaussian distribution
-    rand_peak_enlarge = round(math.fabs(peak_time - random.gauss(peak_time, peak_enlarg * peak_time)))
-    return np.arange(peak_time - rand_peak_enlarge , peak_time + rand_peak_enlarge)  # the peak_time is randomly enlarged based on the calibration parameter peak_enlarg
+    rand_peak_enlarge = round(math.fabs(peak_time - random.gauss(peak_time, peak_enlarge * peak_time)))
+    return np.arange(peak_time - rand_peak_enlarge , peak_time + rand_peak_enlarge)  # the peak_time is randomly enlarged based on the calibration parameter peak_enlarge
 
 def randomise_variables(var):
     return random.uniform((1 - var), (1 + var))
@@ -31,26 +31,26 @@ def calc_random_cycle(time_1, power_1, time_2, power_2, r_c):
 #%% Core model stochastic script
 def Stochastic_Process(j):
     Profile, num_profiles = Initialise_model()
-    peak_enlarg, mu_peak, s_peak, op_factor, Year_behaviour, User_list = Initialise_inputs(j)
-    peak_time_range = calc_peak_time_range(user_list = User_list, peak_enlarg = peak_enlarg)
+    peak_enlarge, mu_peak, s_peak, op_factor, Year_behaviour, User_list = Initialise_inputs(j)
+    peak_time_range = calc_peak_time_range(user_list = User_list, peak_enlarge = peak_enlarge)
 
     '''
     The core stochastic process starts here. For each profile requested by the software user, 
     each Appliance instance within each User instance is separately and stochastically generated
     '''
+
+    tot_time = 0 #initialises variables for the cycle
     for prof_i in range(num_profiles): #the whole code is repeated for each profile that needs to be generated
         Tot_Classes = np.zeros(1440) #initialise an empty daily profile that will be filled with the sum of the hourly profiles of each User instance
         for Us in User_list: #iterates for each User instance (i.e. for each user class)
             Us.load = np.zeros(1440) #initialise empty load for User instance
-            for i in range(Us.num_users): #iterates for every single user within a User class. Each single user has its own separate randomisation
+            for _ in range(Us.num_users):#iterates for every single user within a User class. Each single user has its own separate randomisation
                 rand_daily_pref = 0 if Us.user_preference == 0 else random.randint(1, Us.user_preference)
                 for App in Us.App_list: #iterates for all the App types in the given User class
-                    #initialises variables for the cycle
-                    tot_time = 0
                     App.daily_use = np.zeros(1440)
-                    if ((random.uniform(0, 1) > App.occasional_use)  # evaluates if occasional use happens or not
+                    if (random.uniform(0, 1) > App.occasional_use # evaluates if occasional use happens or not
                             or (App.Pref_index != 0 and rand_daily_pref != App.Pref_index)  # evaluates if daily preference coincides with the randomised daily preference number
-                            or (App.wd_we != Year_behaviour[prof_i] and App.wd_we != 2)):  # checks if the app is allowed in the given yearly behaviour pattern
+                            or App.wd_we not in [Year_behaviour[prof_i],2]): # checks if the app is allowed in the given yearly behaviour pattern
                         continue
 
                     #recalculate windows start and ending times randomly, based on the inputs
@@ -112,40 +112,9 @@ def Stochastic_Process(j):
                     if rand_time > 0.99*(np.diff(rand_window_1)+np.diff(rand_window_2)+np.diff(rand_window_3)):
                         rand_time = int(0.99*(np.diff(rand_window_1)+np.diff(rand_window_2)+np.diff(rand_window_3)))
                     max_free_spot = rand_time #free spots are used to detect if there's still space for switch_ons. Before calculating actual free spots, the max free spot is set equal to the entire randomised func_time
+                    Us.load = App.get_single_user_load_profile(rand_time, tot_time, rand_window_1, rand_window_2, rand_window_3, max_free_spot,
+                               peak_time_range, random_cycle1, random_cycle2, random_cycle3, power = App.power,user_load=Us.load)
 
-                    while tot_time <= rand_time:  # this is the key cycle, which runs for each App until the switch_ons and their duration equals the randomised total time of use of the App
-                        switch_on = App.switch_on
-                        if App.daily_use[switch_on] != 0.001: #control to check if the app is not already on at the randomly selected switch-on time
-                            continue  # if the random switch_on falls somewhere where the App has been already turned on, tries the following conditions
-                        if switch_on in range(rand_window_1[0], rand_window_1[1]):
-                            indexes = App.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot, rand_window_1)
-                        elif switch_on in range(rand_window_2[0], rand_window_2[1]):
-                            indexes = App.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot,rand_window_2)
-                        else:
-                            indexes = App.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot,rand_window_3)
-                        if indexes is None:
-                            continue
-                        tot_time = tot_time + indexes.size  # the count of total time is updated with the size of the indexes array
-
-                        if tot_time > rand_time:  # control to check when the total functioning time is reached. It will be typically overcome, so a correction is applied to avoid this
-                            indexes_adj = indexes[:-(tot_time - rand_time)]  # corrects indexes size to avoid overcoming total time
-                            coincidence = App.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range,index=indexes_adj)
-                            App.daily_use_masked = App.calc_app_daily_use_masked(random_cycle1, random_cycle2,random_cycle3, coincidence, App.power,index=indexes_adj)
-                            #tot_time = (tot_time - indexes.size) + indexes_adj.size  # updates the total time correcting the previous value
-                            break  # exit cycle and go to next App
-                        else:  # if the tot_time has not yet exceeded the App total functioning time, the cycle does the same without applying corrections to indexes size
-                            coincidence = App.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range,index=indexes)
-                            App.daily_use_masked = App.calc_app_daily_use_masked(random_cycle1, random_cycle2,random_cycle3, coincidence, App.power,index=indexes)
-                            tot_time = tot_time  # no correction applied to previously calculated value
-
-                        free_spots = []  # calculate how many free spots remain for further switch_ons
-                        try:
-                            free_spots.extend(j.stop - j.start for j in ma.notmasked_contiguous(App.daily_use_masked))
-
-                        except TypeError:
-                            free_spots = [0]
-                        max_free_spot = max(free_spots)
-                    Us.load = Us.load + App.daily_use  # adds the App profile to the User load
             Tot_Classes = Tot_Classes + Us.load #adds the User load to the total load of all User classes
         Profile.append(Tot_Classes) #appends the total load to the list that will contain all the generated profiles
         print('Profile',prof_i+1,'/',num_profiles,'completed') #screen update about progress of computation
