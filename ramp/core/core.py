@@ -140,7 +140,7 @@ class Appliance():
         else:
             return self.number #this is the case when App.fixed is activated. All 'n' apps of an App instance are switched_on altogether
 
-    def calc_app_daily_use_masked(self, random_cycle1, random_cycle2, random_cycle3, coincidence, power, index):
+    def update_daily_use(self, random_cycle1, random_cycle2, random_cycle3, coincidence, power, index):
         if self.activate > 0:  # evaluates if the app has some duty cycles to be considered
             evaluate = np.round(np.mean(index)) if index.size > 0 else 0
 
@@ -157,14 +157,14 @@ class Appliance():
             np.put(self.daily_use, index, (power * (random.uniform((1 - self.Thermal_P_var), (1 + self.Thermal_P_var))) * coincidence))  # randomises also the App Power if Thermal_P_var is on
             np.put(self.daily_use_masked, index,(power * (random.uniform((1 - self.Thermal_P_var), (1 + self.Thermal_P_var))) * coincidence),
                    mode='clip')
-        return np.zeros_like(ma.masked_greater_equal(self.daily_use_masked,0.001))  # updates the mask excluding the current switch_on event to identify the free_spots for the next iteration
+        self.daily_use_masked = np.zeros_like(ma.masked_greater_equal(self.daily_use_masked,0.001))  # updates the mask excluding the current switch_on event to identify the free_spots for the next iteration
+        return self.daily_use, self.daily_use_masked
 
-    def get_single_user_load_profile(self, rand_time, tot_time, rand_window_1, rand_window_2, rand_window_3,
-                                     max_free_spot,peak_time_range, random_cycle1, random_cycle2, random_cycle3, power,
-                                     user_load):
+    def get_app_profile(self, rand_time, rand_window_1, rand_window_2, rand_window_3,
+                                     max_free_spot,peak_time_range, random_cycle1, random_cycle2, random_cycle3, power):
 
         _, mu_peak, s_peak, op_factor = calibration_parameters()
-
+        tot_time = 0
         while tot_time <= rand_time:  # this is the key cycle, which runs for each App until the switch_ons and their duration equals the randomised total time of use of the App
             switch_on = self.switch_on
             if self.daily_use[switch_on] != 0.001:
@@ -178,16 +178,16 @@ class Appliance():
                 indexes = self.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot, rand_window_3)
             if indexes is None:
                 continue
-            tot_time = tot_time + indexes.size  # the count of total time is updated with the size of the indexes array
+            tot_time += indexes.size  # the count of total time is updated with the size of the indexes array
             if tot_time > rand_time:  # control to check when the total functioning time is reached. It will be typically overcome, so a correction is applied to avoid this
                 indexes_adj = indexes[:-(tot_time - rand_time)]  # corrects indexes size to avoid overcoming total time
                 coincidence = self.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range,index=indexes_adj)
-                self.daily_use_masked = self.calc_app_daily_use_masked(random_cycle1, random_cycle2, random_cycle3,
+                self.daily_use, self.daily_use_masked = self.update_daily_use(random_cycle1, random_cycle2, random_cycle3,
                                                                      coincidence, power, index=indexes_adj)
                 break  # exit cycle and go to next App
             else:  # if the tot_time has not yet exceeded the App total functioning time, the cycle does the same without applying corrections to indexes size
                 coincidence = self.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range, index=indexes)
-                self.daily_use_masked = self.calc_app_daily_use_masked(random_cycle1, random_cycle2, random_cycle3,
+                self.daily_use, self.daily_use_masked = self.update_daily_use(random_cycle1, random_cycle2, random_cycle3,
                                                                      coincidence, power, index=indexes)
                 tot_time = tot_time  # no correction applied to previously calculated value
 
@@ -198,8 +198,9 @@ class Appliance():
             except TypeError:
                 free_spots = [0]
             max_free_spot = max(free_spots)
-        user_load = user_load + self.daily_use  # adds the App profile to the User load
-        return user_load
+
+        return self.daily_use
+
 
     @property
     def single_wcurve(self):

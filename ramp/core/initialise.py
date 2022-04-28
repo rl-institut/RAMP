@@ -52,10 +52,9 @@ def calibration_parameters():
 
     return peak_enlarge, mu_peak, s_peak, op_factor
 
-def Initialise_inputs(j):
+def Initialise_inputs():
     Year_behaviour = yearly_pattern()
-    user_list = user_defined_inputs(j)
     peak_enlarge, mu_peak, s_peak, op_factor = calibration_parameters()
 
-    return (peak_enlarge, mu_peak, s_peak, op_factor, Year_behaviour, user_list)
+    return (peak_enlarge, mu_peak, s_peak, op_factor, Year_behaviour)
 
