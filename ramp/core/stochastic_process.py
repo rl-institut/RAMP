@@ -28,6 +28,9 @@ def calc_random_cycle(time_1, power_1, time_2, power_2, r_c):
     return np.concatenate((np.ones(int(time_1 * r_c))* power_1, np.ones(int(time_2 * r_c))* power_2))
 
 def randomise_cycle(App):
+    """
+    calculates the new randomised cycles taking the random variability in the duty cycle duration
+    """
     App.p_11 = App.P_11 * randomise_variable(App.Thermal_P_var)  # randomly variates the power of thermal apps, otherwise variability is 0
     App.p_12 = App.P_12 * randomise_variable(App.Thermal_P_var)  # randomly variates the power of thermal apps, otherwise variability is 0
     rand_r_c1 = randomise_variable(App.r_c1)
@@ -48,77 +51,28 @@ def randomise_cycle(App):
             random_cycle3 = random.choice([calc_random_cycle(App.t_31, App.p_31, App.t_32, App.p_32, rand_r_c3),calc_random_cycle(App.t_32, App.p_32, App.t_31, App.p_31, rand_r_c3)])
     return random_cycle1, random_cycle2, random_cycle3
 
-def get_single_user_profile(prof_i, Us, peak_time_range, Year_behaviour, rand_daily_pref):
-    for App in Us.App_list:  # iterates for all the App types in the given User class
-        App.daily_use = np.zeros(1440)
-        if (random.uniform(0, 1) > App.occasional_use  # evaluates if occasional use happens or not
-                or (App.Pref_index != 0 and rand_daily_pref != App.Pref_index)  # evaluates if daily preference coincides with the randomised daily preference number
-                or App.wd_we not in [Year_behaviour[prof_i],2]):  # checks if the app is allowed in the given yearly behaviour pattern
-            continue
-        # recalculate windows start and ending times randomly, based on the inputs
-        rand_window_1 = App.calc_rand_window(window_num=1)
-        rand_window_2 = App.calc_rand_window(window_num=2)
-        rand_window_3 = App.calc_rand_window(window_num=3)
 
-        # redefines functioning windows based on the previous randomisation of the boundaries
-        random_windows = [rand_window_1, rand_window_2, rand_window_3]
-        if App.flat == 'yes':  # if the app is "flat" the code stops right after filling the newly created windows without applying any further stochasticity
-            total_power_value = App.POWER[prof_i] * App.number
-            for rand_window in random_windows:
-                App.daily_use[rand_window[0]:rand_window[1]] = np.full(np.diff(rand_window), total_power_value)
-            Us.load = Us.load + App.daily_use
-            continue
-        else:  # otherwise, for "non-flat" apps it puts a mask on the newly defined windows and continues
-            for rand_window in random_windows:
-                App.daily_use[rand_window[0]:rand_window[1]] = np.full(np.diff(rand_window), 0.001)
-
-        App.daily_use_masked = np.zeros_like(ma.masked_not_equal(App.daily_use, 0.001))
-        App.power = App.POWER[prof_i]
-
-        # random variability is applied to the total functioning time and to the duration of the duty cycles, if they have been specified
-        random_var_t = randomise_variable(App.r_t)
-        rand_time = round(random.uniform(App.func_time, int(App.func_time * random_var_t)))
-        random_cycle1 = []
-        random_cycle2 = []
-        random_cycle3 = []
-        if 1 <= App.activate <= 3:
-            random_cycle1, random_cycle2, random_cycle3 = randomise_cycle(App)
-
-        # control to check that the total randomised time of use does not exceed the total space available in the windows
-        if rand_time > 0.99 * (np.diff(rand_window_1) + np.diff(rand_window_2) + np.diff(rand_window_3)):
-            rand_time = int(0.99 * (np.diff(rand_window_1) + np.diff(rand_window_2) + np.diff(rand_window_3)))
-        max_free_spot = rand_time  # free spots are used to detect if there's still space for switch_ons. Before calculating actual free spots, the max free spot is set equal to the entire randomised func_time
-        App.daily_use = App.get_app_profile(rand_time, rand_window_1, rand_window_2, rand_window_3, max_free_spot,
-                                            peak_time_range, random_cycle1, random_cycle2, random_cycle3,
-                                            power=App.power)
-        Us.load = Us.load + App.daily_use  # adds the App profile to the User load
-    return Us.load
-
-def generate_user_load(prof_i, Us, peak_time_range, Year_behaviour):
-    Us.load = np.zeros(1440)  # initialise empty load for User instance
-    for _ in range(Us.num_users):  # iterates for every single user within a User class. Each single user has its own separate randomisation
-        rand_daily_pref = 0 if Us.user_preference == 0 else random.randint(1, Us.user_preference)
-        Us.load = get_single_user_profile(prof_i, Us, peak_time_range, Year_behaviour, rand_daily_pref)
-    return Us.load
-
-#generate_daily_profile
 def generate_profile (prof_i ,User_list, peak_time_range, Year_behaviour):
+    """
+    generates a single load profile taking all the user types into consideration
+    """
+
     Tot_Classes = np.zeros(1440) #initialise an empty daily profile that will be filled with the sum of the hourly profiles of each User instance
     for Us in User_list: #iterates for each User instance (i.e. for each user class)
-        Us.load=generate_user_load(prof_i, Us, peak_time_range, Year_behaviour)
+        Us.load=Us.generate_user_load(prof_i, peak_time_range, Year_behaviour)
         Tot_Classes = Tot_Classes + Us.load #adds the User load to the total load of all User classes
     return Tot_Classes
 
 def Stochastic_Process(j):
+    """
+    Generates a stochastic load profile fo each profile requested by the software user taking each appliance instance assosiated with every user
+    """
     Profile, num_profiles = Initialise_model()
     User_list = user_defined_inputs(j)
     peak_enlarge, mu_peak, s_peak, op_factor, Year_behaviour = Initialise_inputs()
     peak_time_range = calc_peak_time_range(User_list, peak_enlarge)
 
-    '''
-    The core stochastic process starts here. For each profile requested by the software user, 
-    each Appliance instance within each User instance is separately and stochastically generated
-    '''
+
     for prof_i in range(num_profiles):  # the whole code is repeated for each profile that needs to be generated
         Tot_Classes = generate_profile(prof_i ,User_list, peak_time_range, Year_behaviour)
         Profile.append(Tot_Classes)  # appends the total load to the list that will contain all the generated profiles

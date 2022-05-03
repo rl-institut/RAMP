@@ -6,7 +6,9 @@ import numpy.ma as ma
 import pandas as pd
 import random
 import math
-from ramp.core.initialise import calibration_parameters
+from .initialise import calibration_parameters
+from .stochastic_process import randomise_cycle, randomise_variable, calc_random_cycle
+
 #%% Definition of Python classes that constitute the model architecture
 '''
 The code is based on two concatenated python classes, namely 'User' and
@@ -37,6 +39,65 @@ class User():
             windows_curve = np.vstack([windows_curve, single_wcurve])  # this stacks the specific App curve in an overall curve comprising all the Apps within a User class
         return np.transpose(np.sum(windows_curve, axis=0)) * self.num_users
 
+    def get_single_user_profile(self, prof_i, peak_time_range, Year_behaviour, rand_daily_pref):
+        """
+        generates a single load profile for a single user taking all the appliances associated with the particular user
+        into consideration
+        """
+        for App in self.App_list:  # iterates for all the App types in the given User class
+            App.daily_use = np.zeros(1440)
+            if (random.uniform(0, 1) > App.occasional_use  # evaluates if occasional use happens or not
+                    or (App.Pref_index != 0 and rand_daily_pref != App.Pref_index)  # evaluates if daily preference coincides with the randomised daily preference number
+                    or App.wd_we not in [Year_behaviour[prof_i],2]):  # checks if the app is allowed in the given yearly behaviour pattern
+                continue
+            # recalculate windows start and ending times randomly, based on the inputs
+            rand_window_1 = App.calc_rand_window(window_num=1)
+            rand_window_2 = App.calc_rand_window(window_num=2)
+            rand_window_3 = App.calc_rand_window(window_num=3)
+
+            # redefines functioning windows based on the previous randomisation of the boundaries
+            random_windows = [rand_window_1, rand_window_2, rand_window_3]
+            if App.flat == 'yes':  # if the app is "flat" the code stops right after filling the newly created windows without applying any further stochasticity
+                total_power_value = App.POWER[prof_i] * App.number
+                for rand_window in random_windows:
+                    App.daily_use[rand_window[0]:rand_window[1]] = np.full(np.diff(rand_window), total_power_value)
+                self.load = self.load + App.daily_use
+                continue
+            else:  # otherwise, for "non-flat" apps it puts a mask on the newly defined windows and continues
+                for rand_window in random_windows:
+                    App.daily_use[rand_window[0]:rand_window[1]] = np.full(np.diff(rand_window), 0.001)
+
+            App.daily_use_masked = np.zeros_like(ma.masked_not_equal(App.daily_use, 0.001))
+            App.power = App.POWER[prof_i]
+
+            # random variability is applied to the total functioning time and to the duration of the duty cycles, if they have been specified
+            random_var_t = randomise_variable(App.r_t)
+            rand_time = round(random.uniform(App.func_time, int(App.func_time * random_var_t)))
+            random_cycle1 = []
+            random_cycle2 = []
+            random_cycle3 = []
+            if 1 <= App.activate <= 3:
+                random_cycle1, random_cycle2, random_cycle3 = randomise_cycle(App)
+
+            # control to check that the total randomised time of use does not exceed the total space available in the windows
+            if rand_time > 0.99 * (np.diff(rand_window_1) + np.diff(rand_window_2) + np.diff(rand_window_3)):
+                rand_time = int(0.99 * (np.diff(rand_window_1) + np.diff(rand_window_2) + np.diff(rand_window_3)))
+            max_free_spot = rand_time  # free spots are used to detect if there's still space for switch_ons. Before calculating actual free spots, the max free spot is set equal to the entire randomised func_time
+            App.daily_use = App.get_app_profile(rand_time, rand_window_1, rand_window_2, rand_window_3, max_free_spot,
+                                                peak_time_range, random_cycle1, random_cycle2, random_cycle3,power=App.power)
+            self.load = self.load + App.daily_use  # adds the App profile to the User load
+        return self.load
+
+    def generate_user_load(self, prof_i, peak_time_range, Year_behaviour):
+        """
+        generates an aggregate load profile for every single user within a user class
+        """
+        self.load = np.zeros(1440)  # initialise empty load for User instance
+        for _ in range(self.num_users):  # iterates for every single user within a User class. Each single user has its own separate randomisation
+            rand_daily_pref = 0 if self.user_preference == 0 else random.randint(1, self.user_preference)
+            self.load = self.get_single_user_profile(prof_i, peak_time_range, Year_behaviour, rand_daily_pref)
+        return self.load
+
 """
 The Appliance is added the the App_list whenever its window method is called
 Applicance does not need to be part of User class ..., this simplifies a bit the 
@@ -44,7 +105,7 @@ Applicance does not need to be part of User class ..., this simplifies a bit the
 This could also be achieved by add a method add_appliance to User class
 """
 
-#Define the inner class for modelling user's appliances within the correspoding user class
+#Define a class for modelling user's appliances
 class Appliance():
 
     def __init__(self, user, number = 1, power = 0, num_windows = 1, func_time = 0, time_fraction_random_variability = 0, func_cycle = 1, fixed = 'no', fixed_cycle = 0, occasional_use = 1, flat = 'no', thermal_P_var = 0, pref_index = 0, wd_we_type = 2, P_series = False):
@@ -80,21 +141,55 @@ class Appliance():
             self.cw11 = self.window_1
             self.cw12 = self.window_2
 
+    @property
+    def single_wcurve(self):
+        return self.daily_use * np.mean(self.POWER) * self.number
+
     def calc_rand_window(self, window_num=1, max_window_range=np.array([0, 1440])):
         _window = self.__getattribute__(f'window_{window_num}')
         _random_var = self.__getattribute__(f'random_var_{window_num}')
-        rand_window = np.array(
-            [
-                int(random.uniform(_window[0] - _random_var, _window[0] + _random_var)),
-                int(random.uniform(_window[1] - _random_var, _window[1] + _random_var))
-            ]
-        )
+        rand_window = np.array([int(random.uniform(_window[0] - _random_var, _window[0] + _random_var)),
+                                int(random.uniform(_window[1] - _random_var, _window[1] + _random_var))])
         if rand_window[0] < max_window_range[0]:
             rand_window[0] = max_window_range[0]
         if rand_window[1] > max_window_range[1]:
             rand_window[1] = max_window_range[1]
 
         return rand_window
+
+        # if needed, specific duty cycles can be defined for each Appliance, for a maximum of three different ones
+    def specific_cycle_1(self, p_1=0, t_1=0, p_2=0, t_2=0, r_c=0):
+        self.P_11 = p_1  # power absorbed during first part of the duty cycle
+        self.t_11 = t_1  # duration of first part of the duty cycle
+        self.P_12 = p_2  # power absorbed during second part of the duty cycle
+        self.t_12 = t_2  # duration of second part of the duty cycle
+        self.r_c1 = r_c  # random variability of duty cycle segments duration
+        self.fixed_cycle1 = np.concatenate(((np.ones(t_1) * p_1), (np.ones(t_2) * p_2)))  # create numpy array representing the duty cycle
+
+    def specific_cycle_2(self, P_21 = 0, t_21 = 0, P_22 = 0, t_22 = 0, r_c2 = 0):
+        self.P_21 = P_21 #same as for cycle1
+        self.t_21 = t_21
+        self.P_22 = P_22
+        self.t_22 = t_22
+        self.r_c2 = r_c2
+        self.fixed_cycle2 = np.concatenate(((np.ones(t_21)*P_21),(np.ones(t_22)*P_22)))
+
+    def specific_cycle_3(self, P_31 = 0, t_31 = 0, P_32 = 0, t_32 = 0, r_c3 = 0):
+        self.P_31 = P_31 #same as for cycle1
+        self.t_31 = t_31
+        self.P_32 = P_32
+        self.t_32 = t_32
+        self.r_c3 = r_c3
+        self.fixed_cycle3 = np.concatenate(((np.ones(t_31)*P_31),(np.ones(t_32)*P_32)))
+
+    #different time windows can be associated with different specific duty cycles
+    def cycle_behaviour(self, cw11 = np.array([0,0]), cw12 = np.array([0,0]), cw21 = np.array([0,0]), cw22 = np.array([0,0]), cw31 = np.array([0,0]), cw32 = np.array([0,0])):
+        self.cw11 = cw11 #first window associated with cycle1
+        self.cw12 = cw12 #second window associated with cycle1
+        self.cw21 = cw21 #same for cycle2
+        self.cw22 = cw22
+        self.cw31 = cw31 #same for cycle 3
+        self.cw32 = cw32
 
     @property
     def switch_on(self):
@@ -105,10 +200,8 @@ class Appliance():
         # check how many windows to consider
         if self.num_windows == 1:
             return int(random.choice([random.uniform(rand_window_1[0], (rand_window_1[1]))]))
-
         elif self.num_windows == 2:
             return int(random.choice(np.concatenate((np.arange(rand_window_1[0], rand_window_1[1]), np.arange(rand_window_2[0], rand_window_2[1])), axis=0)))
-
         else:
             return int(random.choice(np.concatenate((np.arange(rand_window_1[0], rand_window_1[1]), np.arange(rand_window_2[0], rand_window_2[1]), np.arange(rand_window_3[0], rand_window_3[1]),), axis=0)))
 
@@ -155,13 +248,11 @@ class Appliance():
                 np.put(self.daily_use_masked, index, (random_cycle3 * coincidence), mode='clip')
         else:  # if no duty cycles are specified, a regular switch_on event is modelled
             np.put(self.daily_use, index, (power * (random.uniform((1 - self.Thermal_P_var), (1 + self.Thermal_P_var))) * coincidence))  # randomises also the App Power if Thermal_P_var is on
-            np.put(self.daily_use_masked, index,(power * (random.uniform((1 - self.Thermal_P_var), (1 + self.Thermal_P_var))) * coincidence),
-                   mode='clip')
+            np.put(self.daily_use_masked, index,(power * (random.uniform((1 - self.Thermal_P_var), (1 + self.Thermal_P_var))) * coincidence),mode='clip')
         self.daily_use_masked = np.zeros_like(ma.masked_greater_equal(self.daily_use_masked,0.001))  # updates the mask excluding the current switch_on event to identify the free_spots for the next iteration
         return self.daily_use, self.daily_use_masked
 
-    def get_app_profile(self, rand_time, rand_window_1, rand_window_2, rand_window_3,
-                                     max_free_spot,peak_time_range, random_cycle1, random_cycle2, random_cycle3, power):
+    def get_app_profile(self, rand_time, rand_window_1, rand_window_2, rand_window_3, max_free_spot,peak_time_range, random_cycle1, random_cycle2, random_cycle3, power):
 
         _, mu_peak, s_peak, op_factor = calibration_parameters()
         tot_time = 0
@@ -170,8 +261,7 @@ class Appliance():
             if self.daily_use[switch_on] != 0.001:
                 continue  # if the random switch_on falls somewhere where the App has been already turned on, tries again from beginning of the while cycle
             if switch_on in range(rand_window_1[0], rand_window_1[1]):
-                indexes = self.calc_indexes_for_rand_switch_on(switch_on=switch_on, rand_time=rand_time,
-                                                              max_free_spot=max_free_spot, rand_window=rand_window_1)
+                indexes = self.calc_indexes_for_rand_switch_on(switch_on=switch_on, rand_time=rand_time,max_free_spot=max_free_spot, rand_window=rand_window_1)
             elif switch_on in range(rand_window_2[0], rand_window_2[1]):
                 indexes = self.calc_indexes_for_rand_switch_on(switch_on, rand_time, max_free_spot, rand_window_2)
             else:
@@ -182,13 +272,11 @@ class Appliance():
             if tot_time > rand_time:  # control to check when the total functioning time is reached. It will be typically overcome, so a correction is applied to avoid this
                 indexes_adj = indexes[:-(tot_time - rand_time)]  # corrects indexes size to avoid overcoming total time
                 coincidence = self.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range,index=indexes_adj)
-                self.daily_use, self.daily_use_masked = self.update_daily_use(random_cycle1, random_cycle2, random_cycle3,
-                                                                     coincidence, power, index=indexes_adj)
+                self.daily_use, self.daily_use_masked = self.update_daily_use(random_cycle1, random_cycle2, random_cycle3,coincidence, power, index=indexes_adj)
                 break  # exit cycle and go to next App
             else:  # if the tot_time has not yet exceeded the App total functioning time, the cycle does the same without applying corrections to indexes size
                 coincidence = self.calc_coincident_switch_on(s_peak, mu_peak, op_factor, peak_time_range, index=indexes)
-                self.daily_use, self.daily_use_masked = self.update_daily_use(random_cycle1, random_cycle2, random_cycle3,
-                                                                     coincidence, power, index=indexes)
+                self.daily_use, self.daily_use_masked = self.update_daily_use(random_cycle1, random_cycle2, random_cycle3,coincidence, power, index=indexes)
                 tot_time = tot_time  # no correction applied to previously calculated value
 
             free_spots = []  # calculate how many free spots remain for further switch_ons
@@ -202,41 +290,8 @@ class Appliance():
         return self.daily_use
 
 
-    @property
-    def single_wcurve(self):
-        return self.daily_use * np.mean(self.POWER) * self.number
 
-        #if needed, specific duty cycles can be defined for each Appliance, for a maximum of three different ones
-    def specific_cycle_1(self, p_1 = 0, t_1 = 0, p_2 = 0, t_2 = 0, r_c = 0):
-        self.P_11 = p_1 #power absorbed during first part of the duty cycle
-        self.t_11 = t_1 #duration of first part of the duty cycle
-        self.P_12 = p_2 #power absorbed during second part of the duty cycle
-        self.t_12 = t_2 #duration of second part of the duty cycle
-        self.r_c1 = r_c #random variability of duty cycle segments duration
-        self.fixed_cycle1 = np.concatenate(((np.ones(t_1)*p_1),(np.ones(t_2)*p_2))) #create numpy array representing the duty cycle
 
-    def specific_cycle_2(self, P_21 = 0, t_21 = 0, P_22 = 0, t_22 = 0, r_c2 = 0):
-        self.P_21 = P_21 #same as for cycle1
-        self.t_21 = t_21
-        self.P_22 = P_22
-        self.t_22 = t_22
-        self.r_c2 = r_c2
-        self.fixed_cycle2 = np.concatenate(((np.ones(t_21)*P_21),(np.ones(t_22)*P_22)))
 
-    def specific_cycle_3(self, P_31 = 0, t_31 = 0, P_32 = 0, t_32 = 0, r_c3 = 0):
-        self.P_31 = P_31 #same as for cycle1
-        self.t_31 = t_31
-        self.P_32 = P_32
-        self.t_32 = t_32
-        self.r_c3 = r_c3
-        self.fixed_cycle3 = np.concatenate(((np.ones(t_31)*P_31),(np.ones(t_32)*P_32)))
 
-    #different time windows can be associated with different specific duty cycles
-    def cycle_behaviour(self, cw11 = np.array([0,0]), cw12 = np.array([0,0]), cw21 = np.array([0,0]), cw22 = np.array([0,0]), cw31 = np.array([0,0]), cw32 = np.array([0,0])):
-        self.cw11 = cw11 #first window associated with cycle1
-        self.cw12 = cw12 #second window associated with cycle1
-        self.cw21 = cw21 #same for cycle2
-        self.cw22 = cw22
-        self.cw31 = cw31 #same for cycle 3
-        self.cw32 = cw32
 
