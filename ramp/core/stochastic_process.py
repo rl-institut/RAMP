@@ -1,18 +1,29 @@
 # -*- coding: utf-8 -*-
 #%% Import required libraries
 import numpy as np
-import numpy.ma as ma
 import random 
 import math
 from ramp.core.initialise import Initialise_model, Initialise_inputs, user_defined_inputs
 
 def calc_peak_time_range(user_list, peak_enlarge):
     """
-    Calculation of the peak time range, which is used to discriminate between off-peak and on-peak coincident switch-on probability
-    Calculates first the overall Peak Window (taking into account all User classes).
+    Calculate the peak time range, which is used to discriminate between off-peak and on-peak coincident switch-on probability
+    Calculate first the overall Peak Window (taking into account all User classes).
     The peak window is just a time window in which coincident switch-on of multiple appliances assumes a higher probability than off-peak
     Within the peak window, a random peak time is calculated and then enlarged into a peak_time_range following again a random procedure
+
+    Parameters
+    ----------
+    user_list: list
+        list containing all the user types
+    peak_enlarge: float
+        percentage random enlargement or reduction of peak time range length
+
+    Returns
+    -------
+    peak time range: numpy array
     """
+
     Tot_curve = np.zeros(1440)  # creates an empty daily profile
     for Us in user_list:
         Tot_curve = Tot_curve + Us.windows_curve  # adds the User's theoretical max profile to the total theoretical max comprising all classes
@@ -22,10 +33,45 @@ def calc_peak_time_range(user_list, peak_enlarge):
     return np.arange(peak_time - rand_peak_enlarge , peak_time + rand_peak_enlarge)  # the peak_time is randomly enlarged based on the calibration parameter peak_enlarge
 
 def randomise_variable(var, norm=1):
+    """
+    create a random variable with a uniform distribution using given variable
+
+    Parameters
+    ----------
+    var: float
+        variable that is to be randomised
+    norm: float
+        multiplication factor for randomisation, default = 1
+
+    Returns
+    -------
+    randomised value of the input variable
+    """
     return norm * random.uniform((1 - var), (1 + var))
 
 def calc_random_cycle(time_1, power_1, time_2, power_2, r_c):
-    return np.concatenate((np.ones(int(time_1 * r_c))* power_1, np.ones(int(time_2 * r_c))* power_2))
+    """
+    randomise the fixed cycle related to an appliance
+
+    Parameters
+    ----------
+    time_1: int
+        duration of first part of the duty cycle
+    power_1: float
+        power absorbed during first part of the duty cycle
+    time_2: int
+        duration of second part of the duty cycle
+    power_2: float
+        power absorbed during second part of the duty cycle
+    r_c: float
+        random variability of duty cycle segments duration
+
+    Returns
+    -------
+    random cycle: numpy array
+        specific cycles that are randomised with the random variability fed as input
+    """
+    return np.concatenate((np.ones(int(time_1 * r_c)) * power_1, np.ones(int(time_2 * r_c)) * power_2))
 
 def randomise_cycle(App):
     """
@@ -51,10 +97,25 @@ def randomise_cycle(App):
             random_cycle3 = random.choice([calc_random_cycle(App.t_31, App.p_31, App.t_32, App.p_32, rand_r_c3),calc_random_cycle(App.t_32, App.p_32, App.t_31, App.p_31, rand_r_c3)])
     return random_cycle1, random_cycle2, random_cycle3
 
-
 def generate_profile (prof_i ,User_list, peak_time_range, Year_behaviour):
     """
     generates a single load profile taking all the user types into consideration
+
+    Parameters
+    ----------
+    prof_i: int
+        ith profile requested by the user
+    User_list: list
+       list containing all the user types
+    peak_time_range: numpy array
+        randomised peak time range calculated using calc_peak_time_range function
+    Year_behaviour: numpy array
+        array consisting of a yearly pattern of weekends and weekdays
+
+    Returns
+    -------
+    Tot_Classes: numpy array
+        a single array consisting of the sum of profiles of each User instance
     """
 
     Tot_Classes = np.zeros(1440) #initialise an empty daily profile that will be filled with the sum of the hourly profiles of each User instance
@@ -65,7 +126,20 @@ def generate_profile (prof_i ,User_list, peak_time_range, Year_behaviour):
 
 def Stochastic_Process(j):
     """
-    Generates a stochastic load profile fo each profile requested by the software user taking each appliance instance assosiated with every user
+    Generate a stochastic load profile fo each profile requested by the software user taking each appliance instance assosiated with every user
+
+    Parameters
+    ----------
+    j: int
+        input file number
+
+    Returns
+    -------
+    Profile: numpy array
+        total number of stochastically randomised profiles requested by the user
+    """
+    """
+    
     """
     Profile, num_profiles = Initialise_model()
     User_list = user_defined_inputs(j)
