@@ -73,29 +73,6 @@ def calc_random_cycle(time_1, power_1, time_2, power_2, r_c):
     """
     return np.concatenate((np.ones(int(time_1 * r_c)) * power_1, np.ones(int(time_2 * r_c)) * power_2))
 
-def randomise_cycle(App):
-    """
-    calculates the new randomised cycles taking the random variability in the duty cycle duration
-    """
-    App.p_11 = randomise_variable(var=App.Thermal_P_var, norm=App.P_11) # randomly variates the power of thermal apps, otherwise variability is 0
-    App.p_12 = randomise_variable(var=App.Thermal_P_var, norm=App.P_12)
-    rand_r_c1 = randomise_variable(var=App.r_c1)
-    random_cycle1 = calc_random_cycle(App.t_11, App.p_11, App.t_12, App.p_12, rand_r_c1) # randomise also the fixed cycle
-    random_cycle2 = random_cycle1
-    random_cycle3 = random_cycle1
-    if App.activate >= 2:
-        App.p_21 = randomise_variable(var=App.Thermal_P_var, norm=App.P_21)  # randomly variates the power of thermal apps, otherwise variability is 0
-        App.p_22 = randomise_variable(var=App.Thermal_P_var, norm=App.P_22)
-        rand_r_c2 = randomise_variable(var=App.r_c2)
-        random_cycle2 = calc_random_cycle(App.t_21, App.p_21, App.t_22, App.p_22, rand_r_c2) #randomise also the fixed cycle
-        if App.activate == 3:
-            App.p_31 = randomise_variable(var=App.Thermal_P_var, norm=App.P_31)  # randomly variates the power of thermal apps, otherwise variability is 0
-            App.p_32 = randomise_variable(var=App.Thermal_P_var, norm=App.P_32)
-            rand_r_c3 = randomise_variable(var=App.r_c3)
-            random_cycle1 = random.choice([calc_random_cycle(App.t_11, App.p_11, App.t_12, App.p_12, rand_r_c1),calc_random_cycle(App.t_12, App.p_12, App.t_11, App.p_11,rand_r_c1)])  # randomise also the fixed cycle
-            random_cycle2 = random.choice([calc_random_cycle(App.t_21, App.p_21, App.t_22, App.p_22, rand_r_c2),calc_random_cycle(App.t_22, App.p_22, App.t_21, App.p_21,rand_r_c2)])  # this is to avoid that all cycles are syncronous
-            random_cycle3 = random.choice([calc_random_cycle(App.t_31, App.p_31, App.t_32, App.p_32, rand_r_c3),calc_random_cycle(App.t_32, App.p_32, App.t_31, App.p_31, rand_r_c3)])
-    return random_cycle1, random_cycle2, random_cycle3
 
 def generate_profile (prof_i ,User_list, peak_time_range, Year_behaviour):
     """
@@ -126,7 +103,7 @@ def generate_profile (prof_i ,User_list, peak_time_range, Year_behaviour):
 
 def Stochastic_Process(j):
     """
-    Generate a stochastic load profile fo each profile requested by the software user taking each appliance instance assosiated with every user
+    Generate a stochastic load profile for each profile requested by the software user taking each appliance instance assosiated with every user
 
     Parameters
     ----------
@@ -138,9 +115,7 @@ def Stochastic_Process(j):
     Profile: numpy array
         total number of stochastically randomised profiles requested by the user
     """
-    """
-    
-    """
+
     Profile, num_profiles = Initialise_model()
     User_list = user_defined_inputs(j)
     peak_enlarge, mu_peak, s_peak, op_factor, Year_behaviour = Initialise_inputs()
