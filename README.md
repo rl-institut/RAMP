@@ -22,6 +22,7 @@ The model is developed in Python 3.6, and requires the following libraries:
 * matplotlib
 * math
 * random
+* pandas
 
 ## Quick start
 To get started, download the repository and simply run the "ramp_run.py" script. The console will ask how many profiles (i.e. independent days) need to be simulated, and will provide the results based on the default inputs defined in `input_file_x`.py. To change the inputs, just modify the latter files. Some guidance about the meaning of each input parameter is available in the `core.py` file, where the *User* and *Appliance* Python classes are defined and fully commented. 
@@ -37,6 +38,13 @@ Three different input files are provided as example representing three different
 Repetitive meals do not vary across days, whilst main meals do so. In particular, every household can randomly choose between 3 different types of main meal every day. Such variability in meal preferences is modelled by means of two parameters: the `user preference` and the `preference index`. 
 The `user preference` defines how many types of meal are available for each user to choose every day (e.g. 3). Then, each of the available meal options is modelled separately, with a different `preference index` attached. The stochastic process randomly varies the meal preference of each user every day, deciding whether they want a "type 1" meal, or a "type 2", etc. on a given day.
 This input file is used in [this publication](https://doi.org/10.1109/PTC.2019.8810571)
+
+### Convert python input files to xlsx
+Go to `ramp` folder and run 
+
+```
+python ramp_convert_old_input_files.py -i <path to the input file you wish to convert>
+```
 
 ## Citing
 Please cite the original Journal publication if you use RAMP in your research:
