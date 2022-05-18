@@ -12,9 +12,9 @@ from .stochastic_process import randomise_variable, calc_random_cycle
 #%% Definition of Python classes that constitute the model architecture
 '''
 The code is based on two concatenated python classes, namely 'User' and
-'Appliance', which are used to define at the outer level the User classes and 
-at the inner level all the available appliances within each user class, with 
-their own characteristics. Within the Appliance class, some other functions are
+'Appliance', which are used to define the User classes and all the available 
+appliances within each user class, with their own characteristics. 
+Within the Appliance class, some other functions are
 created to define windows of use and, if needed, specific duty cycles
 '''
 
@@ -91,7 +91,22 @@ class User():
     def generate_user_load(self, prof_i, peak_time_range, Year_behaviour):
         """
         generates an aggregate load profile for every single user within a user class
+
+        Parameters
+        ----------
+        prof_i: int
+            ith profile requested by the user
+        peak_time_range: numpy array
+            randomised peak time range calculated using calc_peak_time_range function
+        Year_behaviour: numpy array
+            array consisting of a yearly pattern of weekends and weekdays peak_time_range
+
+        Returns
+        -------
+        User.load : numpy array
+            the aggregate load profile of all the users within a user class
         """
+
         self.load = np.zeros(1440)  # initialise empty load for User instance
         for _ in range(self.num_users):  # iterates for every single user within a User class. Each single user has its own separate randomisation
             rand_daily_pref = 0 if self.user_preference == 0 else random.randint(1, self.user_preference)
@@ -140,9 +155,6 @@ class Appliance():
         if self.activate == 1:
             self.cw11 = self.window_1
             self.cw12 = self.window_2
-
-    # def add_cycles(self, *args, **kwargs):
-    #     return DutyCycle(*args, **kwargs)
 
     def randomise_cycle(self, App):
         """
@@ -319,64 +331,6 @@ class Appliance():
             max_free_spot = max(free_spots)
 
         return self.daily_use
-
-
-# class DutyCycle():
-#
-#     def __init__(self, P_11=0, t_11=0, P_12=0, t_12=0, r_c1=0, P_21 = 0, t_21 = 0,
-#                   P_22 = 0, t_22 = 0, r_c2 = 0,  P_31 = 0, t_31 = 0, P_32 = 0, t_32 = 0, r_c3 = 0):
-#
-#         for (power_x,count_x) in [(P_11,11), (P_12,12), (P_21,21), (P_22,22), (P_31,31), (P_32,32)]:
-#             self.__setattr__(f'P_{count_x}',power_x) # power absorbed during different parts of the duty cycle
-#         for (time_x,count_x) in [(t_11,11), (t_12,12), (t_21,21), (t_22,22), (t_31,31), (t_32,32)]:
-#             self.__setattr__(f't_{count_x}',time_x) # duration of different parts of the duty cycle
-#         for count, r_x in enumerate((r_c1,r_c2,r_c3),start=1):
-#             self.__setattr__(f'r_c{count}', r_x)
-#         self.fixed_cycle1 = self.get_fixed_cycle(time_1=t_11, power_1=P_11, time_2=t_12, power_2=P_12)
-#         self.fixed_cycle2 = self.get_fixed_cycle(time_1=t_21, power_1=P_21, time_2=t_22, power_2=P_22)
-#         self.fixed_cycle3 = self.get_fixed_cycle(time_1=t_31, power_1=P_31, time_2=t_32, power_2=P_32)
-#
-#
-#     def get_fixed_cycle(self, time_1, power_1, time_2, power_2):
-#         # create numpy array representing the duty cycle
-#         return np.concatenate(((np.ones(time_1) * power_1), (np.ones(time_2) * power_2)))
-#
-#     # if needed, specific duty cycles can be defined for each Appliance, for a maximum of three different ones
-#     def specific_cycle_1(self, p_1=0, t_1=0, p_2=0, t_2=0, r_c=0):
-#         self.P_11 = p_1  # power absorbed during first part of the duty cycle
-#         self.t_11 = t_1  # duration of first part of the duty cycle
-#         self.P_12 = p_2  # power absorbed during second part of the duty cycle
-#         self.t_12 = t_2  # duration of second part of the duty cycle
-#         self.r_c1 = r_c  # random variability of duty cycle segments duration
-#         self.fixed_cycle1 = np.concatenate(((np.ones(t_1) * p_1), (np.ones(t_2) * p_2)))  # create numpy array representing the duty cycle
-#
-#     def specific_cycle_2(self, P_21 = 0, t_21 = 0, P_22 = 0, t_22 = 0, r_c2 = 0):
-#         self.P_21 = P_21 #same as for cycle1
-#         self.t_21 = t_21
-#         self.P_22 = P_22
-#         self.t_22 = t_22
-#         self.r_c2 = r_c2
-#         self.fixed_cycle2 = np.concatenate(((np.ones(t_21)*P_21),(np.ones(t_22)*P_22)))
-#
-#     def specific_cycle_3(self, P_31 = 0, t_31 = 0, P_32 = 0, t_32 = 0, r_c3 = 0):
-#         self.P_31 = P_31 #same as for cycle1
-#         self.t_31 = t_31
-#         self.P_32 = P_32
-#         self.t_32 = t_32
-#         self.r_c3 = r_c3
-#         self.fixed_cycle3 = np.concatenate(((np.ones(t_31)*P_31),(np.ones(t_32)*P_32)))
-#
-#     #different time windows can be associated with different specific duty cycles
-#     def cycle_behaviour(self, cw11 = np.array([0,0]), cw12 = np.array([0,0]), cw21 = np.array([0,0]), cw22 = np.array([0,0]), cw31 = np.array([0,0]), cw32 = np.array([0,0])):
-#         self.cw11 = cw11 #first window associated with cycle1
-#         self.cw12 = cw12 #second window associated with cycle1
-#         self.cw21 = cw21 #same for cycle2
-#         self.cw22 = cw22
-#         self.cw31 = cw31 #same for cycle 3
-#         self.cw32 = cw32
-#
-#
-
 
 
 

@@ -4,6 +4,7 @@ import numpy as np
 import random 
 import math
 from ramp.core.initialise import Initialise_model, Initialise_inputs, user_defined_inputs
+from functools import partial
 
 def calc_peak_time_range(user_list, peak_enlarge):
     """
@@ -95,11 +96,12 @@ def generate_profile (prof_i ,User_list, peak_time_range, Year_behaviour):
         a single array consisting of the sum of profiles of each User instance
     """
 
-    Tot_Classes = np.zeros(1440) #initialise an empty daily profile that will be filled with the sum of the hourly profiles of each User instance
+    Tot_Classes = np.zeros(1440)  # initialise an empty daily profile that will be filled with the sum of the hourly profiles of each User instance
     for Us in User_list: #iterates for each User instance (i.e. for each user class)
         Us.load=Us.generate_user_load(prof_i, peak_time_range, Year_behaviour)
         Tot_Classes = Tot_Classes + Us.load #adds the User load to the total load of all User classes
     return Tot_Classes
+
 
 def Stochastic_Process(j):
     """
