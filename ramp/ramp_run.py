@@ -28,7 +28,7 @@ sys.path.append('../')
 import argparse
 
 
-from core.stochastic_process import Stochastic_Process
+from core.stochastic_process import stochastic_process
 from post_process import post_process as pp
 
 
@@ -50,9 +50,10 @@ parser.add_argument(
     help="number of profiles to be generated",
 )
 
+
 def run_usecase(j=None, fname=None, num_profiles=None):
     # Calls the stochastic process and saves the result in a list of stochastic profiles
-    Profiles_list = Stochastic_Process(j=j, fname=fname, num_profiles=num_profiles)
+    Profiles_list = stochastic_process(j=j, fname=fname, num_profiles=num_profiles)
 
     # Post-processes the results and generates plots
     Profiles_avg, Profiles_list_kW, Profiles_series = pp.Profile_formatting(Profiles_list)
@@ -70,7 +71,6 @@ if __name__ == "__main__":
     fnames = args["fname_path"]
     num_profiles = args["num_profiles"]
     # Define which input files should be considered and run.
-
 
     if fnames is None:
         print("Please provide path to input file with option -i, \n\nDefault to old version of RAMP input files\n")
@@ -101,7 +101,3 @@ if __name__ == "__main__":
 
         for i, fname in enumerate(fnames):
             run_usecase(fname=fname, num_profiles=num_profiles[i])
-
-
-
-
