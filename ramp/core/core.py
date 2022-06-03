@@ -396,12 +396,12 @@ class Appliance:
         self.r_c3 = None
 
         # attribute used for cycle_behaviour
-        self.cw11 = None
-        self.cw12 = None
-        self.cw21 = None
-        self.cw22 = None
-        self.cw31 = None
-        self.cw32 = None
+        self.cw11 = np.array([0,0])
+        self.cw12 = np.array([0,0])
+        self.cw21 = np.array([0,0])
+        self.cw22 = np.array([0,0])
+        self.cw31 = np.array([0,0])
+        self.cw32 = np.array([0,0])
 
         self.random_cycle1 = None
         self.random_cycle2 = None
