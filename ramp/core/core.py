@@ -279,6 +279,19 @@ class Appliance:
         else:
             self.power = power * np.ones(365)  # treat the power as single value for the entire year
 
+        # attributes initialized by self.windows
+        self.random_var_w = None
+        self.daily_use = None
+        self.daily_use_masked = None
+
+        # attribute used for cycle_behaviour
+        self.cw11 = None
+        self.cw12 = None
+        self.cw21 = None
+        self.cw22 = None
+        self.cw31 = None
+        self.cw32 = None
+
     def save(self):
         dm = {}
         for user_attribute in ("user_name", "num_users", "user_preference"):
@@ -355,19 +368,14 @@ class Appliance:
                 np.append(answer, False)
         return answer.all()
 
-    def windows(self, window_1 = np.array([0,0]), window_2 = np.array([0,0]),random_var_w = 0, window_3 = np.array([0,0])):
-        self.window_1 = window_1 #array of start and ending time for window of use #1
-        self.window_2 = window_2 #array of start and ending time for window of use #2
-        self.window_3 = window_3 #array of start and ending time for window of use #3
-        self.random_var_w = random_var_w #percentage of variability in the start and ending times of the windows
-        self.daily_use = np.zeros(1440) #create an empty daily use profile
-        self.daily_use[window_1[0]:(window_1[1])] = np.full(np.diff(window_1),0.001) #fills the daily use profile with infinitesimal values that are just used to identify the functioning windows
-        self.daily_use[window_2[0]:(window_2[1])] = np.full(np.diff(window_2),0.001) #same as above for window2
-        self.daily_use[window_3[0]:(window_3[1])] = np.full(np.diff(window_3),0.001) #same as above for window3
-        self.daily_use_masked = np.zeros_like(ma.masked_not_equal(self.daily_use,0.001)) #apply a python mask to the daily_use array to make only functioning windows 'visibile'
-        self.random_var_1 = int(random_var_w*np.diff(window_1)) #calculate the random variability of window1, i.e. the maximum range of time they can be enlarged or shortened
-        self.random_var_2 = int(random_var_w*np.diff(window_2)) #same as above
-        self.random_var_3 = int(random_var_w*np.diff(window_3)) #same as above
+    def windows(self, window_1=np.array([0, 0]), window_2=np.array([0, 0]), random_var_w=0, window_3=np.array([0, 0])):
+        self.random_var_w = random_var_w  # percentage of variability in the start and ending times of the windows
+        self.daily_use = np.zeros(1440)  # create an empty daily use profile
+        for count, window_x in enumerate((window_1,window_2,window_3), start=1):
+            self.__setattr__(f'window_{count}',window_x) #array of start and ending time for window of use #1,2 & 3
+            self.daily_use[window_x[0]:window_x[1]] = np.full(np.diff(window_x), 0.001) #fills the daily use profile with infinitesimal values that are just used to identify the functioning windows
+            self.__setattr__(f'random_var_{count}', int(random_var_w*np.diff(window_x))) #calculate the random variability of the windows, i.e. the maximum range of time they can be enlarged or shortened
+        self.daily_use_masked = np.zeros_like(ma.masked_not_equal(self.daily_use, 0.001)) #apply a python mask to the daily_use array to make only functioning windows 'visibile'
         self.user.App_list.append(self) #automatically appends the appliance to the user's appliance list
 
         if self.fixed_cycle == 1:
@@ -394,7 +402,6 @@ class Appliance:
             numerosity during all of its potential windows of use
         """
         return self.daily_use * np.mean(self.power) * self.number
-
 
     def specific_cycle(self, cycle_num, **kwargs):
         if cycle_num == 1:
