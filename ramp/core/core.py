@@ -497,6 +497,10 @@ class Appliance:
             self.cw11 = self.window_1
             self.cw12 = self.window_2
 
+    def reset_numerosity_from_probability_distribution(self):
+        """ Chooses the number of appliance from probability distribution"""
+        self.number = np.random.choice([10,20],p=[0.5,0.5])
+
     def assign_random_cycles(self):
         """Calculates randomised cycles taking the random variability in the duty cycle duration"""
         if self.fixed_cycle >= 1:
@@ -705,7 +709,7 @@ class Appliance:
             Energy, 2019, https://doi.org/10.1016/j.energy.2019.04.097.
         """
         s_peak, mu_peak, op_factor = switch_on_parameters()
-
+        self.reset_numerosity_from_probability_distribution()
         # check if indexes are within peak window
         if inside_peak_window is True and self.fixed == 'no':
             # calculates coincident behaviour within the peak time range
