@@ -578,6 +578,7 @@ class Appliance:
             It assumes the appliance is always switched-on with maximum power and
             numerosity during all of its potential windows of use
         """
+        self.reset_numerosity_from_probability_distribution()
         return self.daily_use * np.mean(self.power) * self.number
 
     def specific_cycle(self, cycle_num, **kwargs):
