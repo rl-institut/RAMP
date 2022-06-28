@@ -330,7 +330,7 @@ class Appliance:
     def __init__(
         self,
         user,
-        number=1,
+        number={1:1},
         power=0,
         num_windows=1,
         func_time=0,
@@ -349,6 +349,8 @@ class Appliance:
         self.user = user  #user to which the appliance is bounded
         self.name = name
         self.number = number  #number of appliances of the specified kind
+        self.number_app = list(self.number.keys())
+        self.number_probability = list(self.number.values())
         self.num_windows = num_windows  #number of functioning windows to be considered
         self.func_time = func_time  #total time the appliance is on during the day
         self.time_fraction_random_variability = time_fraction_random_variability  #percentage of total time of use that is subject to random variability
@@ -499,7 +501,7 @@ class Appliance:
 
     def reset_numerosity_from_probability_distribution(self):
         """ Chooses the number of appliance from probability distribution"""
-        self.number = np.random.choice([10,20],p=[0.5,0.5])
+        self.number = np.random.choice(self.number_app, p=self.number_probability)
 
     def assign_random_cycles(self):
         """Calculates randomised cycles taking the random variability in the duty cycle duration"""
@@ -717,7 +719,7 @@ class Appliance:
             # eq. 4 of [1]
             coincidence = min(self.number, max(1, math.ceil(random.gauss(mu=(self.number * mu_peak + 0.5), sigma=(s_peak * self.number * mu_peak)))))
         # check if indexes are off-peak
-        elif inside_peak_window is False and self.fixed == 'no':
+        elif inside_peak_window is False and self.fixed == 'no' and self.number !=0:
             # calculates probability of coincident switch_ons off-peak
             # eq. 3 of [1]
             prob = random.uniform(0, (self.number - op_factor) / self.number)
