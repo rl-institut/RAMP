@@ -348,9 +348,8 @@ class Appliance:
     ):
         self.user = user  #user to which the appliance is bounded
         self.name = name
-        self.number = number  #number of appliances of the specified kind
-        self.number_app = list(self.number.keys())
-        self.number_probability = list(self.number.values())
+        self.number = number  # number of appliances of the specified kind
+                              # can be an int or an array of the probability of having 0 appliance, 1 appliance etc.
         self.num_windows = num_windows  #number of functioning windows to be considered
         self.func_time = func_time  #total time the appliance is on during the day
         self.time_fraction_random_variability = time_fraction_random_variability  #percentage of total time of use that is subject to random variability
@@ -499,9 +498,26 @@ class Appliance:
             self.cw11 = self.window_1
             self.cw12 = self.window_2
 
-    def reset_numerosity_from_probability_distribution(self):
+    @property
+    def get_maximum_appliance_number(self):
         """ Chooses the number of appliance from probability distribution"""
-        self.number = np.random.choice(self.number_app, p=self.number_probability)
+        if isinstance(self.number, int):
+            return self.number
+        elif isinstance(self.number, list):
+            return np.random.choice(len(self.number), p=self.number)
+        else:
+            raise(ValueError(f"Parameter 'number' of appliance {self.name} is neither an integer nor a list of probability"))
+
+    @property
+    def maximum_appliance_number(self):
+        """ Chooses the number of appliance from probability distribution"""
+        if isinstance(self.number, int):
+            return self.number
+        elif isinstance(self.number, list):
+            return len(self.number) - 1
+        else:
+            raise(ValueError(f"Parameter 'number' of appliance {self.name} is neither an integer nor a list of probability"))
+
 
     def assign_random_cycles(self):
         """Calculates randomised cycles taking the random variability in the duty cycle duration"""
@@ -581,7 +597,7 @@ class Appliance:
             numerosity during all of its potential windows of use
         """
         self.reset_numerosity_from_probability_distribution()
-        return self.daily_use * np.mean(self.power) * self.number
+        return self.daily_use * np.mean(self.power) * self.maximum_appliance_number
 
     def specific_cycle(self, cycle_num, **kwargs):
         if cycle_num == 1:
@@ -712,29 +728,33 @@ class Appliance:
             Energy, 2019, https://doi.org/10.1016/j.energy.2019.04.097.
         """
         s_peak, mu_peak, op_factor = switch_on_parameters()
-        self.reset_numerosity_from_probability_distribution()
+
+        app_num = self.get_appliance_number()
         # check if indexes are within peak window
         if inside_peak_window is True and self.fixed == 'no':
             # calculates coincident behaviour within the peak time range
             # eq. 4 of [1]
-            coincidence = min(self.number, max(1, math.ceil(random.gauss(mu=(self.number * mu_peak + 0.5), sigma=(s_peak * self.number * mu_peak)))))
+            coincidence = min(app_num, max(1, math.ceil(random.gauss(mu=(app_num * mu_peak + 0.5), sigma=(s_peak * app_num * mu_peak)))))
         # check if indexes are off-peak
         elif inside_peak_window is False and self.fixed == 'no' and self.number !=0:
             # calculates probability of coincident switch_ons off-peak
             # eq. 3 of [1]
-            prob = random.uniform(0, (self.number - op_factor) / self.number)
+            if app_num > 0:
+                prob = random.uniform(0, (app_num - op_factor) / app_num)
 
-            # randomly selects how many appliances are on at the same time
-            array = np.arange(0, self.number) / self.number
-            try:
-                on_number = np.max(np.where(prob >= array)) + 1
-            except ValueError:
-                on_number = 1
+                # randomly selects how many appliances are on at the same time
+                array = np.arange(0, app_num) / app_num
+                try:
+                    on_number = np.max(np.where(prob >= array)) + 1
+                except ValueError:
+                    on_number = 1
+            else:
+                on_number = 0
 
             coincidence = on_number
         else:
             # All 'n' copies of an Appliance instance are switched on altogether
-            coincidence = self.number
+            coincidence = app_num
         return coincidence
 
     def generate_load_profile(self, rand_time, peak_time_range, rand_window_1, rand_window_2, rand_window_3, power):
