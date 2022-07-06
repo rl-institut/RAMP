@@ -427,7 +427,7 @@ class Appliance:
                 raise ValueError("Windows 3 is not provided although 3 windows were declared")
         else:
             self.window_3 = window_3
-        print(self.window_1, self.window_2, self.window_3)
+
         self.random_var_w = random_var_w #percentage of variability in the start and ending times of the windows
         self.daily_use = np.zeros(1440) #create an empty daily use profile
         self.daily_use[self.window_1[0]:(self.window_1[1])] = np.full(np.diff(self.window_1),0.001) #fills the daily use profile with infinitesimal values that are just used to identify the functioning windows
@@ -463,7 +463,6 @@ class Appliance:
             numerosity during all of its potential windows of use
         """
         return self.daily_use * np.mean(self.power) * self.number
-
 
     def specific_cycle(self, cycle_num, **kwargs):
         if cycle_num == 1:
